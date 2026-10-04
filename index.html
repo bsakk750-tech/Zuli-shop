@@ -203,6 +203,13 @@ footer{border-top:1px solid var(--line);padding:32px 0 calc(32px + env(safe-area
 }
 .owner-link{background:none;border:none;color:inherit;opacity:.5;font-size:12px;padding:0;text-decoration:underline}
 .owner-link:hover{opacity:.9}
+.chk{display:flex;gap:10px;align-items:center;font-size:15px;margin-bottom:14px}
+.chk input{width:20px;height:20px}
+.vis{display:flex;gap:7px;align-items:center;font-size:12px;opacity:.85;margin-top:5px}
+.vis input{width:18px;height:18px;margin:0}
+.a-row.dim{opacity:.6}
+.tag-off{font-size:11px;border:1px solid var(--line);border-radius:10px;padding:1px 7px;opacity:.8}
+.ph-row select,#phColor{width:100%;padding:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:3px;font:inherit;font-size:13px}
 </style>
 </head>
 <body>
@@ -275,7 +282,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 calc(32px + env(safe-area
   </section>
 </div>
 
-<div class="saving-ov" id="savingOv"><span class="spin"></span>Сохраняем…</div>
+<div class="saving-ov" id="savingOv"><span class="spin"></span><span id="savingTxt">Сохраняем…</span></div>
 
 <div class="overlay" id="overlay" onclick="closeAll()"></div>
 
@@ -330,6 +337,7 @@ const PALETTE=[{n:'Чёрный',c:'#222026'},{n:'Графит',c:'#4A4650'},{n:
 const BGS = ['var(--card1)','var(--card2)','var(--card3)','var(--card4)','var(--card5)','var(--card6)'];
 const SITE_DEF={brand:'Zuli Shop',heroTitle:'Одежда, в которой хочется остаться',heroText:'Небольшая коллекция женской одежды — выбираем ткани и крой так, будто покупаем для себя.',aboutText:'Подбираем одежду, в которой удобно и красиво каждый день. Пишите — поможем с размером и расскажем о новинках.',howText:'Собери товары в корзину и оформи заказ через WhatsApp — переписка откроется с готовым списком.',phone:'79667241858'};
 let P=[],nextId=1,REVIEWS=[],nextRevId=1,CATS=[],SITE=Object.assign({},SITE_DEF),LOADED_PATHS=[];
+const PH_MAX=10,IMG_MAIN=1600,IMG_THUMB=640;
 const okPath=x=>typeof x==='string'&&/^[A-Za-z0-9][A-Za-z0-9._\/-]{0,120}$/.test(x)&&x.indexOf('..')<0;
 const ICON_CAT={dress:'Платья',blouse:'Блузы и топы',top:'Блузы и топы',skirt:'Юбки',cardigan:'Верхняя одежда',coat:'Верхняя одежда',bag:'Аксессуары'};
 let fq='',fcat='',fsort='def';
@@ -337,7 +345,7 @@ function allPaths(){const a=[];P.forEach(p=>p.photos.forEach(ph=>{if(ph.src)a.pu
 function applyData(d){
   d=(d&&typeof d==='object')?d:{};
   P=(Array.isArray(d.products)?d.products:[]).filter(p=>p&&Number.isInteger(Number(p.id))&&typeof p.name==='string').map(p=>({
-    id:Number(p.id),name:p.name,price:Number(p.price)||0,desc:String(p.desc||''),cat:typeof p.cat==='string'?p.cat:undefined,icon:ICONS[p.icon]?p.icon:'bag',
+    id:Number(p.id),name:p.name,price:Number(p.price)||0,desc:String(p.desc||''),cat:typeof p.cat==='string'?p.cat:undefined,icon:ICONS[p.icon]?p.icon:'bag',hidden:p.hidden===true,
     photos:(Array.isArray(p.photos)?p.photos:[]).filter(x=>x&&okPath(x.src)).map(x=>({src:x.src,t:okPath(x.t)?x.t:'',color:String(x.color||'')})),
     sizes:(Array.isArray(p.sizes)?p.sizes:[]).map(String),
     colors:(Array.isArray(p.colors)?p.colors:[]).filter(c=>c&&typeof c.n==='string'&&/^#[0-9a-fA-F]{3,8}$/.test(c.c)).map(c=>({n:c.n,c:c.c}))}));
@@ -360,9 +368,9 @@ function applySite(){
 }
 function catOf(p){return p.cat!==undefined?p.cat:(ICON_CAT[p.icon]||'');}
 function allCats(){const a=CATS.slice();P.forEach(p=>{const c=catOf(p);if(c&&!a.includes(c))a.push(c);});return a;}
-function cats(){return allCats().filter(c=>P.some(p=>catOf(p)===c));}
+function cats(){return allCats().filter(c=>pub().some(p=>catOf(p)===c));}
 function visible(){
-  let l=P.filter(p=>(!fcat||catOf(p)===fcat)&&(!fq||(p.name+' '+(p.desc||'')+' '+catOf(p)).toLowerCase().includes(fq)));
+  let l=pub().filter(p=>(!fcat||catOf(p)===fcat)&&(!fq||(p.name+' '+(p.desc||'')+' '+catOf(p)).toLowerCase().includes(fq)));
   if(fsort==='asc')l=l.slice().sort((a,b)=>a.price-b.price);
   else if(fsort==='desc')l=l.slice().sort((a,b)=>b.price-a.price);
   else if(fsort==='name')l=l.slice().sort((a,b)=>a.name.localeCompare(b.name,'ru'));
@@ -372,7 +380,7 @@ function renderChips(){
   const cs=chipCats();if(fcat&&!cs.includes(fcat))fcat='';
   const el=document.getElementById('chips');el.style.display=cs.length?'flex':'none';
   const owner=document.body.classList.contains('owner');
-  el.innerHTML=cs.length?['<button class="chip'+(fcat?'':' active')+'" onclick="setCat(-1)">Все</button>'].concat(cs.map((c,i)=>'<button class="chip'+(c===fcat?' active':'')+'" onclick="setCat('+i+')">'+esc(c)+(owner&&!P.some(p=>catOf(p)===c)?' · пусто':'')+'</button>')).join(''):'';
+  el.innerHTML=cs.length?['<button class="chip'+(fcat?'':' active')+'" onclick="setCat(-1)">Все</button>'].concat(cs.map((c,i)=>'<button class="chip'+(c===fcat?' active':'')+'" onclick="setCat('+i+')">'+esc(c)+(owner&&!pub().some(p=>catOf(p)===c)?' · пусто':'')+'</button>')).join(''):'';
 }
 function chipCats(){return document.body.classList.contains('owner')?allCats():cats();}
 function setCat(i){fcat=i<0?'':chipCats()[i];renderGrid();}
@@ -386,7 +394,9 @@ function phSrc(x){return x.local||x.src;}
 function phThumb(x){return x.localT||x.t||x.local||x.src;}
 function thumb(p){const ph=photosOf(p);return ph.length? '<img src="'+esc(phThumb(ph[0]))+'" alt="'+esc(p.name)+'" loading="lazy" decoding="async">' : svg(p.icon);}
 function bgOf(p){return photosOf(p).length?'var(--card3)':BGS[P.indexOf(p)%6];}
-function byId(id){return P.find(p=>p.id===id);}
+function anyById(id){return P.find(p=>p.id===id);}
+function byId(id){const p=anyById(id);return(p&&!p.hidden)?p:undefined;}
+function pub(){return P.filter(p=>!p.hidden);}
 
 let cart=[], fav=new Set(), current=null, curSize=null, curColor=null;
 
@@ -399,7 +409,7 @@ function renderGrid(){
     '<span class="heart'+(fav.has(p.id)?' active':'')+'" onclick="event.stopPropagation();quickFav('+p.id+')">'+heartIcon(fav.has(p.id))+'</span>'+
     '<div class="photo" style="background:'+bgOf(p)+'">'+thumb(p)+'</div>'+
     '<h3>'+esc(p.name)+'</h3><div class="price">'+fmt(p.price)+'</div></button>').join('')
-    : '<p class="section-sub">'+(P.length?'Ничего не найдено. Попробуй изменить поиск или категорию.':'Скоро здесь появятся товары.')+'</p>';
+    : '<p class="section-sub">'+(pub().length?'Ничего не найдено. Попробуй изменить поиск или категорию.':'Скоро здесь появятся товары.')+'</p>';
 }
 function quickFav(id){fav.has(id)?fav.delete(id):fav.add(id);renderGrid();updateBadges();}
 let galSet=[];
@@ -449,13 +459,13 @@ function addToCart(){
 }
 function changeQty(i,d){cart[i].qty=(cart[i].qty||1)+d;if(cart[i].qty<=0)cart.splice(i,1);updateBadges();switchTab('cart');}
 function persist(){try{localStorage.setItem('zuli-shop-v1',JSON.stringify({cart:cart,fav:[...fav]}));}catch(e){}}
-function loadSaved(){try{const d=JSON.parse(localStorage.getItem('zuli-shop-v1')||'null');if(d){cart=(d.cart||[]).filter(c=>byId(c.pid));fav=new Set((d.fav||[]).filter(id=>byId(id)));}}catch(e){}}
+function loadSaved(){try{const d=JSON.parse(localStorage.getItem('zuli-shop-v1')||'null');if(d){cart=(d.cart||[]).filter(c=>anyById(c.pid));fav=new Set((d.fav||[]).filter(id=>anyById(id)));}}catch(e){}}
 function updateBadges(){
   persist();
   const cb=document.getElementById('cartBadge'),fb=document.getElementById('favBadge');
-  const cq=cart.reduce((s,it)=>s+(it.qty||1),0);
+  const cq=cart.filter(it=>byId(it.pid)).reduce((s,it)=>s+(it.qty||1),0);
   cb.style.display=cq?'flex':'none';cb.textContent=cq;
-  fb.style.display=fav.size?'flex':'none';fb.textContent=fav.size;
+  const fq2=[...fav].filter(id=>byId(id)).length;fb.style.display=fq2?'flex':'none';fb.textContent=fq2;
 }
 let checkoutStep=null, ordForm={addr:'',city:'',phone:''};
 function currentCartItems(){return cart.map((it,i)=>({it,i,p:byId(it.pid)})).filter(x=>x.p);}
@@ -518,7 +528,7 @@ function switchTab(tab){
     const total=items.reduce((s,x)=>s+Number(x.p.price)*(x.it.qty||1),0);
     foot.innerHTML=items.length?renderCartFoot(items,total):'';
   } else {
-    const fl=P.filter(p=>fav.has(p.id));
+    const fl=pub().filter(p=>fav.has(p.id));
     list.innerHTML=fl.length?fl.map(p=>'<div class="d-item"><div class="photo" style="background:'+bgOf(p)+'">'+thumb(p)+'</div><div class="d-info"><div>'+esc(p.name)+'</div><div class="meta">'+fmt(p.price)+'</div><button class="d-remove" onclick="closeAll();openProduct('+p.id+')">Открыть</button></div><button class="d-heart" onclick="unfav('+p.id+')" aria-label="Убрать из избранного">'+heartIcon(true)+'</button></div>').join(''):'<div class="empty-note">Пока ничего нет</div>';
     foot.innerHTML='';
   }
@@ -538,12 +548,13 @@ function openAdmin(){
 function adminList(msg){
   editing=null;delArm=null;palPick=-1;document.getElementById('adminTitle').textContent='Товары';
   document.getElementById('adminBody').innerHTML=
-    (P.length?P.map(p=>'<div class="a-row"><div class="photo" style="background:'+bgOf(p)+'">'+thumb(p)+'</div><div class="grow"><div>'+esc(p.name)+'</div><div style="opacity:.6">'+fmt(p.price)+'</div></div><button class="btn btn-outline sm" onclick="adminEdit('+p.id+')">Изменить</button><button class="btn btn-outline sm" id="del'+p.id+'" onclick="askDelete('+p.id+')">Удалить</button></div>').join(''):'<p class="empty-note">Товаров пока нет.</p>')+
+    (P.length?P.map(p=>'<div class="a-row'+(p.hidden?' dim':'')+'"><div class="photo" style="background:'+bgOf(p)+'">'+thumb(p)+'</div><div class="grow"><div>'+esc(p.name)+(p.hidden?' <span class="tag-off">скрыт</span>':'')+'</div><div style="opacity:.6">'+fmt(p.price)+'</div><label class="vis"><input type="checkbox"'+(p.hidden?'':' checked')+' onchange="toggleHidden('+p.id+')"> Показывать на сайте</label></div><button class="btn btn-outline sm" onclick="adminEdit('+p.id+')">Изменить</button><button class="btn btn-outline sm" id="del'+p.id+'" onclick="askDelete('+p.id+')">Удалить</button></div>').join(''):'<p class="empty-note">Товаров пока нет.</p>')+
     '<div class="a-actions"><button class="btn btn-primary" onclick="adminEdit(null)">+ Добавить товар</button><button class="btn btn-outline" onclick="catManage()">Категории</button><button class="btn btn-outline" onclick="siteEdit()">Тексты сайта</button><button class="btn btn-outline" onclick="reviewsManage()">Отзывы</button></div>'+
     (msg?'<div class="a-msg">'+esc(msg)+'</div>':'')+
     '<p style="font-size:12px;opacity:.6;margin-top:12px">После сохранения изменения появляются на сайте через 1–2 минуты. Все прошлые версии хранит GitHub, удалённое можно вернуть там же.</p>'+
     '<div class="a-actions"><button class="btn btn-outline sm" onclick="ownerLogout()">Выйти</button></div>';
 }
+function toggleHidden(id){const p=anyById(id);if(!p)return;p.hidden=!p.hidden;publishAll(()=>{p.hidden=!p.hidden;});}
 function askDelete(id){
   if(delArm===id){P=P.filter(p=>p.id!==id);cart=cart.filter(c=>c.pid!==id);fav.delete(id);publishAll();return;}
   delArm=id;document.getElementById('del'+id).textContent='Точно?';
@@ -568,7 +579,7 @@ function saveSite(){
 }
 function adminEdit(id){
   palPick=-1;
-  const p=id?byId(id):null;
+  const p=id?anyById(id):null;
   editing=p?JSON.parse(JSON.stringify(p)):{id:null,name:'',price:'',desc:'',icon:'dress',photos:[],sizes:['XS','S','M','L','XL'],colors:[],cat:''};
   if(p)editing.cat=catOf(p);
   renderForm();
@@ -576,21 +587,20 @@ function adminEdit(id){
 function renderForm(){
   const e=editing;document.getElementById('adminTitle').textContent=e.id?'Изменить товар':'Новый товар';
   document.getElementById('adminBody').innerHTML=
+   '<label class="chk"><input type="checkbox" id="fShow"'+(e.hidden?'':' checked')+'> Показывать на сайте</label>'+
    '<div class="f"><label>Название</label><input id="fName" value="'+esc(e.name)+'"></div>'+
    '<div class="f"><label>Цена, ₽</label><input id="fPrice" type="number" min="0" value="'+esc(e.price)+'"></div>'+
    '<div class="f"><label>Описание</label><textarea id="fDesc" rows="3">'+esc(e.desc)+'</textarea></div>'+
    '<div class="f"><label>Категория</label><select id="fCat"><option value="">Без категории</option>'+allCats().map(c=>'<option value="'+esc(c)+'"'+(c===e.cat?' selected':'')+'>'+esc(c)+'</option>').join('')+'</select><div class="cat-add"><input id="fNewCat" placeholder="Новая категория, например «Намазник»"><button type="button" class="btn btn-outline sm" onclick="addCatInline()">Добавить</button></div></div>'+
    '<div class="f"><label>Размеры через запятую (пусто — без выбора размера)</label><input id="fSizes" value="'+esc(e.sizes.join(', '))+'"></div>'+
    '<div class="f"><label>Цвета</label>'+e.colors.map((c,i)=>'<div class="c-row"><input type="color" value="'+esc(c.c)+'" oninput="editing.colors['+i+'].c=this.value"><input value="'+esc(c.n)+'" placeholder="Название цвета" oninput="editing.colors['+i+'].n=this.value"><button onclick="delColor('+i+')">×</button></div>').join('')+'<div class="hint">Выбери цвет из палитры:</div><div class="pal">'+PALETTE.map((c,i)=>'<button type="button" class="pal-sw'+(i===palPick?' sel':'')+'" style="background:'+c.c+'" title="'+c.n+'" onclick="pickPreset('+i+')"></button>').join('')+'</div><div class="pal-info" id="palInfo">'+palInfoHtml()+'</div><button class="btn btn-outline sm" onclick="addColor()">+ свой цвет</button></div>'+
-   '<div class="f"><label>Фото товара (можно несколько, до 6)</label>'+
-   (e.photos.length?e.photos.map((ph,i)=>'<div class="ph-row"><div class="prev"><img src="'+esc(phThumb(ph))+'" alt=""></div><div class="grow"><div class="opt-label">Цвет на этом фото</div><select onchange="editing.photos['+i+'].color=this.value">'+photoColorOptions(ph.color)+'</select></div><button type="button" onclick="delPhoto('+i+')">×</button></div>').join(''):'<div class="hint" style="margin-bottom:8px">Фото пока нет — на карточке рисуется силуэт.</div>')+
-   '<input type="file" accept="image/*" multiple onchange="pickPhoto(this)"><div class="hint">Если у цвета нет своего фото, покупатель увидит подпись «Фото с этим цветом нету».</div></div>'+
+   photosFormHtml()+
    '<div class="f"><label>Силуэт на карточке, если нет фото (это не категория)</label><select id="fIcon" onchange="syncFields();renderForm()">'+Object.keys(ICON_NAMES).map(k=>'<option value="'+k+'"'+(k===e.icon?' selected':'')+'>'+ICON_NAMES[k]+'</option>').join('')+'</select></div>'+
    '<div class="a-actions"><button class="btn btn-primary" id="saveBtn" onclick="saveProduct()">Сохранить</button><button class="btn btn-outline" onclick="adminList()">Назад</button></div><div class="a-msg" id="aMsg"></div>';
 }
 function syncFields(){
   const g=id=>document.getElementById(id);if(!g('fName'))return;
-  if(g('fCat'))editing.cat=g('fCat').value;editing.name=g('fName').value;editing.price=g('fPrice').value;editing.desc=g('fDesc').value;
+  if(g('fShow'))editing.hidden=!g('fShow').checked;if(g('fCat'))editing.cat=g('fCat').value;editing.name=g('fName').value;editing.price=g('fPrice').value;editing.desc=g('fDesc').value;
   editing.sizes=g('fSizes').value.split(',').map(s=>s.trim()).filter(Boolean);editing.icon=g('fIcon').value;
 }
 function palInfoHtml(msg){
@@ -612,20 +622,57 @@ function addPreset(){
 }
 function addColor(){syncFields();editing.colors.push({n:'',c:'#C97B84'});renderForm();}
 function delColor(i){syncFields();editing.colors.splice(i,1);renderForm();}
-function photoColorOptions(sel){return '<option value="">Любой / общее фото</option>'+editing.colors.filter(c=>c.n.trim()).map(c=>'<option value="'+esc(c.n.trim())+'"'+(c.n.trim()===sel?' selected':'')+'>'+esc(c.n.trim())+'</option>').join('');}
+function photoColorOptions(sel){return '<option value="">Общие фото</option>'+editing.colors.filter(c=>c.n.trim()).map(c=>'<option value="'+esc(c.n.trim())+'"'+(c.n.trim()===sel?' selected':'')+'>'+esc(c.n.trim())+'</option>').join('');}
 function loadImg(f){return new Promise((res,rej)=>{const url=URL.createObjectURL(f),img=new Image();img.onload=()=>res({img,url});img.onerror=()=>{URL.revokeObjectURL(url);rej();};img.src=url;});}
-function encodeImg(img,m,q){
+function encodeImg(img,m,q,jq){
   const k=Math.min(1,m/Math.max(img.width,img.height));
-  const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.width*k));c.height=Math.max(1,Math.round(img.height*k));
-  const g=c.getContext('2d');g.imageSmoothingQuality='high';g.drawImage(img,0,0,c.width,c.height);
-  let o=c.toDataURL('image/webp',q);if(o.indexOf('data:image/webp')!==0)o=c.toDataURL('image/jpeg',Math.min(.85,q+.05));return o;
+  const tw=Math.max(1,Math.round(img.width*k)),th=Math.max(1,Math.round(img.height*k));
+  let src=img,w=img.width,h=img.height;
+  while(w/2>=tw&&h/2>=th){
+    const c=document.createElement('canvas');c.width=Math.round(w/2);c.height=Math.round(h/2);
+    const g=c.getContext('2d');g.imageSmoothingQuality='high';g.drawImage(src,0,0,c.width,c.height);src=c;w=c.width;h=c.height;
+  }
+  const c=document.createElement('canvas');c.width=tw;c.height=th;
+  const g=c.getContext('2d');g.imageSmoothingQuality='high';g.drawImage(src,0,0,tw,th);
+  let o=c.toDataURL('image/webp',q);if(o.indexOf('data:image/webp')!==0)o=c.toDataURL('image/jpeg',jq);return o;
+}
+let phTarget='',phNote='';
+function cntColor(k){return editing.photos.filter(ph=>ph.color===k).length;}
+function photosFormHtml(){
+  const e=editing;const known=new Set(['']);e.colors.forEach(c=>{if(c.n.trim())known.add(c.n.trim());});
+  e.photos.forEach(ph=>{if(!known.has(ph.color))ph.color='';});
+  const groups=[{k:'',l:'Общие фото (к любому цвету)'}].concat(e.colors.filter(c=>c.n.trim()).map(c=>({k:c.n.trim(),l:c.n.trim()})));
+  if(!groups.some(g=>g.k===phTarget))phTarget='';
+  let h='<div class="f"><label>Фото товара: до '+PH_MAX+' фото на каждый цвет</label>',any=false;
+  groups.forEach(g=>{
+    const items=e.photos.map((ph,i)=>({ph,i})).filter(x=>x.ph.color===g.k);
+    if(!items.length)return;any=true;
+    h+='<div class="opt-label" style="margin-top:10px"><b>'+esc(g.l)+'</b> · '+items.length+'/'+PH_MAX+'</div>'+items.map(({ph,i})=>'<div class="ph-row"><div class="prev"><img src="'+esc(phThumb(ph))+'" alt=""></div><div class="grow"><div class="opt-label">Перенести к цвету</div><select onchange="movePhoto('+i+',this.value)">'+photoColorOptions(ph.color)+'</select></div><button type="button" onclick="delPhoto('+i+')">×</button></div>').join('');
+  });
+  if(!any)h+='<div class="hint" style="margin-bottom:8px">Фото пока нет: на карточке рисуется силуэт.</div>';
+  h+='<div class="opt-label" style="margin-top:12px">Добавить фото к цвету:</div><select id="phColor" onchange="syncFields();phTarget=this.value;renderForm()">'+groups.map(g=>'<option value="'+esc(g.k)+'"'+(g.k===phTarget?' selected':'')+'>'+esc(g.l)+' ('+cntColor(g.k)+'/'+PH_MAX+')</option>').join('')+'</select>'+
+    '<input type="file" accept="image/*" multiple onchange="pickPhoto(this)" style="margin-top:8px"'+(cntColor(phTarget)>=PH_MAX?' disabled':'')+'>'+
+    '<div class="a-msg" id="phMsg" style="margin-top:6px">'+esc(phNote)+'</div>'+
+    '<div class="hint">Фото сохраняются в высоком качестве. Если у выбранного цвета нет своих фото, покупатель увидит подпись «Фото с этим цветом нету».</div></div>';
+  phNote='';return h;
+}
+function movePhoto(i,k){
+  syncFields();
+  if(editing.photos[i].color!==k&&cntColor(k)>=PH_MAX)phNote='Для этого цвета уже '+PH_MAX+' фото';else editing.photos[i].color=k;
+  renderForm();
 }
 async function pickPhoto(inp){
   const files=[...(inp.files||[])];if(!files.length)return;syncFields();
-  for(const f of files){
-    if(editing.photos.length>=6)break;
-    try{const {img,url}=await loadImg(f);editing.photos.push({src:'',t:'',local:encodeImg(img,900,.8),localT:encodeImg(img,360,.75),color:''});URL.revokeObjectURL(url);}catch(e){}
+  const k=(document.getElementById('phColor')||{}).value||'';phTarget=k;
+  const room=PH_MAX-cntColor(k);
+  if(room<=0){phNote='Для этого цвета уже '+PH_MAX+' фото';renderForm();return;}
+  const m=document.getElementById('phMsg');if(m)m.textContent='Обрабатываю фото…';
+  let added=0;
+  for(const f of files.slice(0,room)){
+    try{const {img,url}=await loadImg(f);editing.photos.push({src:'',t:'',local:encodeImg(img,IMG_MAIN,.9,.9),localT:encodeImg(img,IMG_THUMB,.82,.85),color:k});URL.revokeObjectURL(url);added++;}catch(e){}
   }
+  if(files.length>room)phNote='Добавлено '+added+' из '+files.length+': для этого цвета максимум '+PH_MAX+' фото';
+  else if(added<files.length)phNote='Не все файлы удалось открыть: добавлено '+added+' из '+files.length;
   renderForm();
 }
 function delPhoto(i){syncFields();editing.photos.splice(i,1);renderForm();}
@@ -657,7 +704,7 @@ function saveProduct(){
   syncFields();const msg=document.getElementById('aMsg');
   if(!editing.name.trim()){msg.textContent='Введите название';return;}
   if(editing.price===''||isNaN(Number(editing.price))){msg.textContent='Введите цену числом';return;}
-  const item={id:editing.id||nextId++,name:editing.name.trim(),price:Number(editing.price),desc:editing.desc.trim(),cat:(editing.cat||'').trim(),icon:editing.icon,photos:editing.photos.filter(ph=>ph&&(ph.src||ph.local)).map(ph=>({src:ph.src||'',t:ph.t||'',local:ph.local||'',localT:ph.localT||'',color:editing.colors.some(c=>c.n.trim()===ph.color)?ph.color:''})),sizes:editing.sizes,colors:editing.colors.filter(c=>c.n.trim()).map(c=>({n:c.n.trim(),c:c.c}))};
+  const item={id:editing.id||nextId++,name:editing.name.trim(),price:Number(editing.price),hidden:!!editing.hidden,desc:editing.desc.trim(),cat:(editing.cat||'').trim(),icon:editing.icon,photos:editing.photos.filter(ph=>ph&&(ph.src||ph.local)).map(ph=>({src:ph.src||'',t:ph.t||'',local:ph.local||'',localT:ph.localT||'',color:editing.colors.some(c=>c.n.trim()===ph.color)?ph.color:''})),sizes:editing.sizes,colors:editing.colors.filter(c=>c.n.trim()).map(c=>({n:c.n.trim(),c:c.c}))};
   const i=P.findIndex(p=>p.id===item.id);if(i>=0)P[i]=item;else P.push(item);
   publishAll();
 }
@@ -675,7 +722,7 @@ function reviewsManage(msg){
   editing=null;delArm=null;document.getElementById('adminTitle').textContent='Отзывы';
   const list=REVIEWS.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   document.getElementById('adminBody').innerHTML=
-   (list.length?list.map(r=>'<div class="a-row"><div class="grow">'+esc(r.text.slice(0,60))+(r.text.length>60?'…':'')+'<div style="opacity:.55;font-size:12px">'+esc(fmtDate(r.date))+(r.productId&&byId(r.productId)?' · '+esc(byId(r.productId).name):'')+'</div></div><button class="btn btn-outline sm" onclick="reviewEdit('+r.id+')">Изменить</button><button class="btn btn-outline sm" id="rdel'+r.id+'" onclick="askDelRev('+r.id+')">Удалить</button></div>').join(''):'<p class="empty-note">Отзывов пока нет.</p>')+
+   (list.length?list.map(r=>'<div class="a-row"><div class="grow">'+esc(r.text.slice(0,60))+(r.text.length>60?'…':'')+'<div style="opacity:.55;font-size:12px">'+esc(fmtDate(r.date))+(r.productId&&anyById(r.productId)?' · '+esc(anyById(r.productId).name):'')+'</div></div><button class="btn btn-outline sm" onclick="reviewEdit('+r.id+')">Изменить</button><button class="btn btn-outline sm" id="rdel'+r.id+'" onclick="askDelRev('+r.id+')">Удалить</button></div>').join(''):'<p class="empty-note">Отзывов пока нет.</p>')+
    '<div class="a-actions"><button class="btn btn-primary" onclick="reviewEdit(null)">+ Добавить отзыв</button><button class="btn btn-outline" onclick="adminList()">Назад</button></div><div class="a-msg">'+(msg?esc(msg):'')+'</div>';
 }
 function askDelRev(id){
@@ -718,7 +765,7 @@ async function gh(path,opts,creds){
 async function ghBranch(){if(!ghBranchName){const r=await(await gh('')).json();ghBranchName=r.default_branch||'main';}return ghBranchName;}
 const b64=str=>btoa(unescape(encodeURIComponent(str)));
 function cleanData(){
-  return {v:1,products:P.map(p=>({id:p.id,name:p.name,price:p.price,desc:p.desc,cat:p.cat,icon:p.icon,photos:p.photos.map(ph=>({src:ph.src,t:ph.t,color:ph.color})),sizes:p.sizes,colors:p.colors})),nextId,site:SITE,categories:CATS,reviews:REVIEWS,nextRevId};
+  return {v:1,products:P.map(p=>({id:p.id,name:p.name,price:p.price,desc:p.desc,cat:p.cat,icon:p.icon,...(p.hidden?{hidden:true}:{}),photos:p.photos.map(ph=>({src:ph.src,t:ph.t,color:ph.color})),sizes:p.sizes,colors:p.colors})),nextId,site:SITE,categories:CATS,reviews:REVIEWS,nextRevId};
 }
 async function refreshFromRepo(){
   const br=await ghBranch();
@@ -731,7 +778,12 @@ async function commitFiles(files,dels,message){
   const ref=await(await gh('/git/ref/heads/'+encodeURIComponent(br))).json();
   const headSha=ref.object.sha;
   const head=await(await gh('/git/commits/'+headSha)).json();
-  const blobs=await Promise.all(files.map(f=>gh('/git/blobs',{method:'POST',body:JSON.stringify({content:f.b64,encoding:'base64'})}).then(r=>r.json())));
+  const blobs=new Array(files.length);let next=0,done=0;const tx=document.getElementById('savingTxt');
+  await Promise.all(Array.from({length:Math.min(4,files.length)},async()=>{
+    while(next<files.length){const i=next++;
+      blobs[i]=await(await gh('/git/blobs',{method:'POST',body:JSON.stringify({content:files[i].b64,encoding:'base64'})})).json();
+      done++;if(tx&&files.length>3)tx.textContent='Загружаю файлы: '+done+' из '+files.length;}
+  }));
   const tree=files.map((f,i)=>({path:f.path,mode:'100644',type:'blob',sha:blobs[i].sha}));
   dels.forEach(p=>tree.push({path:p,mode:'100644',type:'blob',sha:null}));
   const nt=await(await gh('/git/trees',{method:'POST',body:JSON.stringify({base_tree:head.tree.sha,tree})})).json();
@@ -745,7 +797,7 @@ function ghErrText(e){
   if(c==='net')return'Нет связи с GitHub. Если ты в России, включи VPN и повтори.';
   return'Не удалось сохранить. Подожди минуту и попробуй ещё раз.';
 }
-async function publishAll(){
+async function publishAll(undo){
   if(isSaving) return; isSaving=true; document.getElementById('savingOv').classList.add('show');
   const assigned=[];
   try{
@@ -766,10 +818,12 @@ async function publishAll(){
     LOADED_PATHS=allPaths();
     renderGrid();updateBadges();adminList('Сохранено ✓ На сайте появится через 1–2 минуты');
   }catch(err){
+    if(typeof undo==='function')undo();
     assigned.forEach(ph=>{ph.src='';ph.t='';});
     const t=ghErrText(err);
     if(document.getElementById('aMsg'))document.getElementById('aMsg').textContent=t;else adminList(t);
   }finally{
+    const tx2=document.getElementById('savingTxt');if(tx2)tx2.textContent='Сохраняем…';
     document.getElementById('savingOv').classList.remove('show');isSaving=false;
   }
 }
